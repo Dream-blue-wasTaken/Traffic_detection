@@ -81,6 +81,44 @@ def read_first_frame(path: str | Path, start_seconds: float = 0.0) -> np.ndarray
     return frame
 
 
+def convert_to_h264(video_path: Path) -> Path:
+    """Ensure video is encoded in H.264 (yuv420p) so browsers (and Streamlit) can play it.
+
+    If imageio-ffmpeg or ffmpeg is available, re-encodes into a web-compatible MP4.
+    """
+    try:
+        import imageio_ffmpeg
+        ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        import shutil
+        ffmpeg_exe = shutil.which("ffmpeg")
+
+    if not ffmpeg_exe:
+        return video_path
+
+    tmp_path = video_path.with_name(f"{video_path.stem}_web{video_path.suffix}")
+    import subprocess
+    cmd = [
+        ffmpeg_exe,
+        "-y",
+        "-i", str(video_path),
+        "-vcodec", "libx264",
+        "-pix_fmt", "yuv420p",
+        "-preset", "fast",
+        "-crf", "23",
+        str(tmp_path),
+    ]
+    try:
+        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+        # Replace original with the web-compatible video
+        tmp_path.replace(video_path)
+    except Exception:
+        if tmp_path.exists():
+            tmp_path.unlink()
+
+    return video_path
+
+
 class VideoWriterContext:
     """Context manager for OpenCV VideoWriter that guarantees proper resource cleanup."""
 
@@ -129,3 +167,6 @@ class VideoWriterContext:
         if self.writer is not None:
             self.writer.release()
             self.writer = None
+        # Transcode to web-compatible H.264
+        if self.output_path.exists() and self.output_path.stat().st_size > 0:
+            convert_to_h264(self.output_path)

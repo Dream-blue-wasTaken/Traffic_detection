@@ -5,10 +5,17 @@ from __future__ import annotations
 import io
 import json
 import logging
+import sys
 import tempfile
 import threading
 import time
 from pathlib import Path
+
+# Ensure src is on sys.path so direct execution works without editable install
+_SRC_DIR = Path(__file__).resolve().parent.parent
+if str(_SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(_SRC_DIR))
+
 import cv2
 import numpy as np
 import pandas as pd

@@ -6,6 +6,12 @@ import argparse
 import logging
 import sys
 from pathlib import Path
+
+# Ensure src is on sys.path so direct execution works without editable install
+_SRC_DIR = Path(__file__).resolve().parent.parent
+if str(_SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(_SRC_DIR))
+
 from tqdm import tqdm
 
 from vcount.config import load_config

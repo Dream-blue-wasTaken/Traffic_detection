@@ -1,0 +1,6 @@
+timestamp_s,class_name,direction
+12.4,car,entry
+15.1,motorcycle,exit
+24.8,truck,entry
+30.2,car,exit
+45.0,bus,entry

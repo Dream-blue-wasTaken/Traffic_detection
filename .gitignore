@@ -1,0 +1,32 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Output directories & runs
+outputs/
+data/videos/
+*.mp4
+*.avi
+*.mov
+*.mkv
+
+# Weights and models
+*.pt
+*.onnx
+*.engine
+
+# Environment and IDE
+.env
+.venv
+env/
+venv/
+.vscode/
+.idea/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# OS specific
+Thumbs.db
+.DS_Store

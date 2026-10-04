@@ -1,0 +1,50 @@
+# Example site configuration (e.g., Highway camera setup)
+model:
+  weights: "yolo26m.pt"
+  device: "auto"
+  imgsz: 960
+  conf: 0.30
+  iou: 0.5
+  half: true
+  classes:
+    car: 2
+    motorcycle: 3
+    bus: 5
+    truck: 7
+
+tracker:
+  type: "bytetrack"
+  yaml_override: null
+  track_buffer: 45
+
+counting:
+  line_file: "data/lines/example_site.json"
+  parallel_offset_px: 50.0
+  mode: "gated"
+  min_track_frames: 3
+  count_point: "bottom_center"
+  direction_labels:
+    a_to_b: "northbound"
+    b_to_a: "southbound"
+  dedup_enabled: true
+  dedup_frames: 6
+  dedup_distance_px: 45.0
+
+intervals:
+  length_seconds: 300        # 5 minutes
+  video_start_clock: "2024-05-10 08:00:00"
+
+video:
+  frame_stride: 1
+  start_seconds: 0
+  end_seconds: null
+  resize_width: null
+
+output:
+  dir: "outputs"
+  save_video: true
+  video_codec: "mp4v"
+  draw_boxes: true
+  draw_trails: true
+  csv: true
+  json_summary: true

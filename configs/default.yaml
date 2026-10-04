@@ -1,0 +1,49 @@
+model:
+  weights: "yolo11n.pt"      # Note: Ultralytics latest supported pretrained; fallback yolo11/yolo8
+  device: "auto"             # "auto" | "cpu" | "cuda:0" | "mps"
+  imgsz: 960                 # larger than 640 helps small/distant vehicles
+  conf: 0.35                 # confidence threshold (tune on a validation clip)
+  iou: 0.5                   # NMS IoU
+  half: true                 # FP16 on GPU
+  classes:                   # COCO ids
+    car: 2
+    motorcycle: 3
+    bus: 5
+    truck: 7
+
+tracker:
+  type: "bytetrack"          # "bytetrack" | "botsort"
+  yaml_override: null        # optional path to a customised tracker YAML
+  track_buffer: 30           # frames to keep a lost track (raise to ~60 for heavy occlusion)
+
+counting:
+  line_file: null            # path to saved line JSON; if null, ask interactively on first frame
+  parallel_offset_px: 60.0   # distance of the two parallel "gate" lines from the mid-line
+  mode: "gated"              # "gated" (paper-style: gate line -> mid-line) | "simple" (mid-line only)
+  min_track_frames: 3        # ignore tracks seen in fewer frames (kills flicker/ghost IDs)
+  count_point: "bottom_center"  # "center" | "bottom_center"
+  direction_labels:
+    a_to_b: "entry"
+    b_to_a: "exit"
+  dedup_enabled: false
+  dedup_frames: 5
+  dedup_distance_px: 40.0
+
+intervals:
+  length_seconds: 900        # 900 = 15 min ; 300 = 5 min ; 60 = 1 min
+  video_start_clock: null    # optional clock string e.g. "2018-10-17 08:00:00"
+
+video:
+  frame_stride: 1            # process every Nth frame (1 = all)
+  start_seconds: 0
+  end_seconds: null          # null = until end
+  resize_width: null         # optional downscale for speed
+
+output:
+  dir: "outputs"
+  save_video: true
+  video_codec: "mp4v"
+  draw_boxes: true
+  draw_trails: true
+  csv: true
+  json_summary: true

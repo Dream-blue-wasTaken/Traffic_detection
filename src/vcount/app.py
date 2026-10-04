@@ -71,6 +71,10 @@ def init_session_state() -> None:
         }
 
 
+# Ensure state is always initialized immediately on script evaluation
+init_session_state()
+
+
 def main():
     st.set_page_config(
         page_title="Traffic Vision — Vehicle Counting System",
@@ -167,7 +171,7 @@ def main():
 
             if st.session_state.first_frame is not None:
                 rgb_f = cv2.cvtColor(st.session_state.first_frame, cv2.COLOR_BGR2RGB)
-                st.image(rgb_f, caption="First Video Frame", use_container_width=True)
+                st.image(rgb_f, caption="First Video Frame", width="stretch")
 
     # ------------------ TAB 2: LINE SETUP ------------------
     with tab_line:
@@ -240,7 +244,7 @@ def main():
                     dir_a_to_b=dir_entry,
                     dir_b_to_a=dir_exit,
                 )
-                st.image(preview_img, caption="Counting Line & Gate Preview", use_container_width=True)
+                st.image(preview_img, caption="Counting Line & Gate Preview", width="stretch")
 
     # ------------------ TAB 3: RUN COUNTER ------------------
     with tab_run:
@@ -288,6 +292,9 @@ def main():
                     }
                 )
 
+                video_path_arg = st.session_state.video_path
+                counting_line_arg = st.session_state.counting_line
+
                 stop_evt = threading.Event()
                 w_state["status"] = "running"
                 w_state["progress"] = 0.0
@@ -309,9 +316,9 @@ def main():
                             w_state["preview_frame"] = frame_bgr
 
                         res = run_pipeline(
-                            video_path=st.session_state.video_path,
+                            video_path=video_path_arg,
                             cfg=cfg,
-                            line=st.session_state.counting_line,
+                            line=counting_line_arg,
                             model=cached_m,
                             progress_cb=on_prog,
                             preview_cb=on_prev,
@@ -354,7 +361,7 @@ def main():
                 )
                 if w_state["preview_frame"] is not None:
                     rgb_p = cv2.cvtColor(w_state["preview_frame"], cv2.COLOR_BGR2RGB)
-                    preview_ph.image(rgb_p, caption="Live Detection Preview", use_container_width=True)
+                    preview_ph.image(rgb_p, caption="Live Detection Preview", width="stretch")
 
                 time.sleep(0.6)
                 st.rerun()
@@ -394,7 +401,7 @@ def main():
             col_tab, col_chart = st.columns([1, 1.2])
 
             with col_tab:
-                st.dataframe(res.df_wide, use_container_width=True)
+                st.dataframe(res.df_wide, width="stretch")
 
             with col_chart:
                 chart_cols = [c for c in res.df_wide.columns if ("entry_" in c or "exit_" in c) and not c.endswith("_total")]
@@ -488,7 +495,7 @@ def main():
                     for p_name in plot_names:
                         p_file = res.output_dir / p_name
                         if p_file.is_file():
-                            st.image(str(p_file), caption=p_name, use_container_width=True)
+                            st.image(str(p_file), caption=p_name, width="stretch")
 
                 except Exception as err:
                     st.error(f"Evaluation failed: {err}")

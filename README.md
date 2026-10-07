@@ -71,7 +71,7 @@ Requires Python 3.10+ (tested on Python 3.12 & 3.13):
 git clone <repo-url>
 cd traffic
 python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+source .venv/bin/activate  # On Windows: .venv\bin\activate
 ```
 
 ### 2. Install Dependencies

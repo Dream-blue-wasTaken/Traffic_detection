@@ -36,3 +36,7 @@ htmlcov/
 # OS specific
 Thumbs.db
 .DS_Store
+*.pdf
+a.md 
+PRESENTATION.md
+PRESENTATION_EXPLANATION_GUIDE.md

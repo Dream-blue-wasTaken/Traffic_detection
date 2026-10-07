@@ -46,13 +46,12 @@ def test_pipeline_smoke_end_to_end(tmp_path):
     assert result.summary["processed_frames"] > 0
 
 
-def test_streamlit_app_loads():
-    from streamlit.testing.v1 import AppTest
+def test_fastapi_server_loads():
+    from vcount.server import app
 
-    app_path = Path(__file__).resolve().parent.parent / "src" / "vcount" / "app.py"
-    at = AppTest.from_file(str(app_path), default_timeout=30)
-    at.run()
-    assert not at.exception
-    assert len(at.title) > 0
-    assert "Vehicle Counting System" in at.title[0].value
+    assert app.title == "Traffic Vision API"
+    routes = [route.path for route in app.routes]
+    assert "/api/system" in routes
+    assert "/api/upload" in routes
+    assert "/api/pipeline/start" in routes
 

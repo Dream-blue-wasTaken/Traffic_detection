@@ -37,6 +37,7 @@ Inspired by and substantially improving upon the methodology in:
 ├── outputs/                      # Generated run outputs (CSVs, MP4, JSON, charts)
 ├── eval.md                       # Comprehensive evaluation benchmark report
 ├── benchmark_eval_results.png    # Benchmark speed vs accuracy charts
+├── frontend/                     # React + TypeScript (Vite) single-page web app
 ├── src/vcount/
 │   ├── __init__.py
 │   ├── config.py                 # Dataclasses, YAML loading & validation
@@ -49,13 +50,13 @@ Inspired by and substantially improving upon the methodology in:
 │   ├── exporter.py               # CSV, events log, JSON summary & config exporter
 │   ├── pipeline.py               # End-to-end execution pipeline
 │   ├── cli.py                    # Command-line entry points
-│   ├── app.py                    # Streamlit interactive web frontend
-│   ├── ui_helpers.py             # Streamlit visual helpers & ZIP packager
+│   ├── server.py                 # FastAPI + WebSocket backend API server
+│   ├── ui_helpers.py             # Visual overlay helpers & ZIP packager
 │   └── evaluate.py               # Accuracy metrics, paired t-test, & Bland-Altman plots
 ├── scripts/
 │   ├── benchmark_models.py       # Benchmark FPS and accuracy across models
 │   └── make_ground_truth_template.py # Ground truth CSV generator
-├── tests/                        # Comprehensive unit & smoke tests (30 passing)
+├── tests/                        # Comprehensive unit & server tests (33 passing)
 ├── pyproject.toml
 └── requirements.txt
 ```
@@ -84,20 +85,36 @@ pip install -e .
 
 ---
 
-## 💻 Streamlit Web Application
+## 💻 React + FastAPI Web Application
 
-Launch the browser interface:
+### Option A: Run Full-Stack Development Mode
 
+1. **Start the FastAPI Backend Server** (port 8000):
+   ```bash
+   python -m vcount.server
+   ```
+2. **Start the React Frontend Dev Server** (port 5173):
+   ```bash
+   cd frontend
+   pnpm install
+   pnpm dev
+   ```
+   Open `http://localhost:5173` in your browser.
+
+### Option B: Run Unified Production Build
+Build the React application once, and FastAPI will automatically serve the API and the SPA from a single port:
 ```bash
-streamlit run src/vcount/app.py
+cd frontend && pnpm build && cd ..
+python -m vcount.server
 ```
+Visit `http://localhost:8000` directly.
 
-### Streamlit Features:
-1. **Upload Video:** Drag and drop MP4, AVI, MOV, or MKV videos with instant resolution, FPS, and duration inspection.
-2. **Interactive Line Placement:** Fine-tune mid-line endpoints with real-time visual feedback, gate-line distance sliders, and JSON import/export.
-3. **Run with Live Progress:** Background threaded processing with real-time frame previews, progress bar, ETA, and live FPS metrics.
-4. **Interactive Analytics:** View wide/tidy tables, stacked interval bar charts, play back annotated MP4 video, and download all artifacts (or a single `.zip`).
-5. **Direct Evaluation:** Upload ground-truth data in the browser to compute accuracy %, signed bias, and view Bland-Altman plots.
+### React Application Features:
+1. **Upload Video:** Drag-and-drop MP4, AVI, MOV, or MKV videos with instant resolution, FPS, duration, and frame count inspection.
+2. **Interactive Canvas Line Placement:** Click and drag handles directly on top of the first video frame on an HTML5 canvas, with real-time gate offset projection, directional arrows, quick presets, and JSON import/export.
+3. **Run Pipeline with Live Streaming:** Real-time WebSocket preview stream with active detections and counting line overlay, live progress percentage, and dynamic ETA countdown.
+4. **Interactive Analytics:** Total vehicle counts by direction, interval breakdown charts and data tables, crossing events log with search and filtering, in-browser annotated video playback, and instant downloads (CSV, JSON, ZIP).
+5. **Direct Evaluation:** Upload ground-truth data in the browser to compute accuracy %, signed bias, and view evaluation plots.
 
 ---
 

@@ -86,6 +86,19 @@ def load_model(weights: str) -> YOLO:
     return YOLO(weights)
 
 
+def compute_box_iou(box1: tuple[float, float, float, float], box2: tuple[float, float, float, float]) -> float:
+    """Calculate Intersection over Union (IoU) of two bounding boxes."""
+    xA = max(box1[0], box2[0])
+    yA = max(box1[1], box2[1])
+    xB = min(box1[2], box2[2])
+    yB = min(box1[3], box2[3])
+    inter_area = max(0.0, xB - xA) * max(0.0, yB - yA)
+    box1_area = (box1[2] - box1[0]) * (box1[3] - box1[1])
+    box2_area = (box2[2] - box2[0]) * (box2[3] - box2[1])
+    union_area = box1_area + box2_area - inter_area
+    return inter_area / union_area if union_area > 0 else 0.0
+
+
 def track_video(
     video_path: str | Path,
     cfg: Config,
@@ -93,7 +106,9 @@ def track_video(
 ) -> Generator[FrameResult, None, None]:
     """Track vehicles in video using Ultralytics YOLO model.track().
 
-    Yields FrameResult for each processed frame.
+    Supports ensemble tracking: simultaneously tracks standard vehicles
+    (cars, motorcycles, buses, trucks) via the primary model and auto-rickshaws
+    via the specialized fine-tuned model (if autorickshaw_weights is configured).
     """
     video_p = Path(video_path)
     if not video_p.is_file():
@@ -115,9 +130,20 @@ def track_video(
     classes_to_track = list(cfg.model.classes.values())
     id_to_name = {cid: name for name, cid in cfg.model.classes.items()}
 
+    # Check for ensemble auto-rickshaw model
+    rickshaw_model: YOLO | None = None
+    rickshaw_weights = getattr(cfg.model, "autorickshaw_weights", None)
+    if rickshaw_weights and Path(rickshaw_weights).is_file():
+        try:
+            rickshaw_model = load_model(rickshaw_weights)
+            logger.info(f"Loaded ensemble auto-rickshaw model from {rickshaw_weights}")
+        except Exception as e:
+            logger.warning(f"Could not load ensemble auto-rickshaw weights {rickshaw_weights}: {e}")
+
     logger.info(
         f"Starting tracking on {video_p.name} with model={cfg.model.weights}, device={device}, "
-        f"half={half}, tracker={cfg.tracker.type}, stride={cfg.video.frame_stride}"
+        f"half={half}, tracker={cfg.tracker.type}, stride={cfg.video.frame_stride}, "
+        f"ensemble={'enabled' if rickshaw_model else 'disabled'}"
     )
 
     results_gen = model.track(
@@ -135,8 +161,28 @@ def track_video(
         vid_stride=cfg.video.frame_stride,
     )
 
+    rickshaw_gen = None
+    if rickshaw_model is not None:
+        rickshaw_conf = getattr(cfg.model, "autorickshaw_conf", 0.25)
+        rickshaw_gen = rickshaw_model.track(
+            source=str(video_p),
+            stream=True,
+            persist=True,
+            tracker=tracker_yaml,
+            conf=rickshaw_conf,
+            iou=cfg.model.iou,
+            imgsz=cfg.model.imgsz,
+            classes=[0],
+            device=device,
+            half=half,
+            verbose=False,
+            vid_stride=cfg.video.frame_stride,
+        )
+
     stride = cfg.video.frame_stride
-    for loop_i, r in enumerate(results_gen):
+    stream_iter = zip(results_gen, rickshaw_gen) if rickshaw_gen is not None else ((r, None) for r in results_gen)
+
+    for loop_i, (r, r_rick) in enumerate(stream_iter):
         original_frame_idx = loop_i * stride
         timestamp_s = original_frame_idx / info.fps if info.fps > 0 else 0.0
 
@@ -155,7 +201,8 @@ def track_video(
             new_h = int(h * scale)
             frame = cv2.resize(frame, (cfg.video.resize_width, new_h))
 
-        objects: list[TrackedObject] = []
+        # 1. Collect Primary Model Detections (Cars, Bikes, Buses, Trucks)
+        primary_objects: list[TrackedObject] = []
         if r.boxes is not None and r.boxes.id is not None:
             ids = r.boxes.id.int().cpu().tolist()
             clss = r.boxes.cls.int().cpu().tolist()
@@ -164,7 +211,7 @@ def track_video(
 
             for tid, cid, cf, box in zip(ids, clss, confs, xyxys):
                 cname = id_to_name.get(cid, model.names.get(cid, f"class_{cid}"))
-                objects.append(
+                primary_objects.append(
                     TrackedObject(
                         track_id=int(tid),
                         class_id=int(cid),
@@ -174,9 +221,41 @@ def track_video(
                     )
                 )
 
+        # 2. Collect Ensemble Auto-Rickshaw Detections
+        rickshaw_objects: list[TrackedObject] = []
+        if r_rick is not None and r_rick.boxes is not None and r_rick.boxes.id is not None:
+            r_ids = r_rick.boxes.id.int().cpu().tolist()
+            r_confs = r_rick.boxes.conf.cpu().tolist()
+            r_xyxys = r_rick.boxes.xyxy.cpu().tolist()
+
+            for r_tid, r_cf, r_box in zip(r_ids, r_confs, r_xyxys):
+                # Offset track_id by 100,000 to prevent ID collision with primary tracker
+                rickshaw_objects.append(
+                    TrackedObject(
+                        track_id=int(r_tid) + 100000,
+                        class_id=100,
+                        class_name="autorickshaw",
+                        conf=float(r_cf),
+                        xyxy=(float(r_box[0]), float(r_box[1]), float(r_box[2]), float(r_box[3])),
+                    )
+                )
+
+        # 3. Cross-Model Suppression: If a standard vehicle box heavily overlaps with an
+        # auto-rickshaw (IoU > 0.40), suppress the standard vehicle (prevent misclassifying auto as car/bike)
+        filtered_primary: list[TrackedObject] = []
+        for p_obj in primary_objects:
+            overlaps_with_rickshaw = any(
+                compute_box_iou(p_obj.xyxy, r_obj.xyxy) > 0.40 for r_obj in rickshaw_objects
+            )
+            if not overlaps_with_rickshaw:
+                filtered_primary.append(p_obj)
+
+        final_objects = filtered_primary + rickshaw_objects
+
         yield FrameResult(
             frame_idx=original_frame_idx,
             timestamp_s=timestamp_s,
             frame=frame,
-            objects=objects,
+            objects=final_objects,
         )
+

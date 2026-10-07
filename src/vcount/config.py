@@ -12,8 +12,8 @@ import yaml
 class ModelConfig:
     weights: str = "yolo26m.pt"
     device: str = "auto"
-    imgsz: int = 960
-    conf: float = 0.35
+    imgsz: int = 640
+    conf: float = 0.25
     iou: float = 0.5
     half: bool = True
     classes: dict[str, int] = field(
@@ -24,6 +24,8 @@ class ModelConfig:
             "truck": 7,
         }
     )
+    autorickshaw_weights: str | None = None
+    autorickshaw_conf: float = 0.25
 
 
 @dataclass
@@ -36,9 +38,9 @@ class TrackerConfig:
 @dataclass
 class CountingConfig:
     line_file: str | None = None
-    parallel_offset_px: float = 60.0
-    mode: str = "gated"
-    min_track_frames: int = 3
+    parallel_offset_px: float = 30.0
+    mode: str = "simple"
+    min_track_frames: int = 2
     count_point: str = "bottom_center"
     direction_labels: dict[str, str] = field(
         default_factory=lambda: {

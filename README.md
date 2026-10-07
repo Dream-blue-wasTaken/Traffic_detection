@@ -25,13 +25,18 @@ Inspired by and substantially improving upon the methodology in:
 
 ```
 ├── configs/
-│   ├── default.yaml              # Default configuration parameters
+│   ├── default.yaml              # Default configuration (multi-class COCO)
+│   ├── autorickshaw.yaml         # Optimized Auto-Rickshaw configuration
 │   └── example_site.yaml         # Example highway camera setup
 ├── data/
 │   ├── ground_truth/             # Manual ground truth CSVs & template
 │   ├── lines/                    # Saved counting line configurations (JSON)
-│   └── videos/                   # Input video storage (git-ignored)
+│   └── videos/                   # Input video storage (put your test videos here)
+├── models/
+│   └── best.pt                   # Fine-tuned YOLO26n Auto-Rickshaw weights
 ├── outputs/                      # Generated run outputs (CSVs, MP4, JSON, charts)
+├── eval.md                       # Comprehensive evaluation benchmark report
+├── benchmark_eval_results.png    # Benchmark speed vs accuracy charts
 ├── src/vcount/
 │   ├── __init__.py
 │   ├── config.py                 # Dataclasses, YAML loading & validation
@@ -99,19 +104,17 @@ streamlit run src/vcount/app.py
 ## ⌨️ Command-Line Interface (CLI)
 
 ### 1. Run Vehicle Counter
-```bash
-# Basic run with coordinate line
-python -m vcount.cli run --video data/videos/traffic_clip.mp4 --line "100,500,1180,500"
 
-# Run with custom model, interval, and saved line file
-python -m vcount.cli run \
-  --video data/videos/traffic_clip.mp4 \
-  --config configs/default.yaml \
-  --line-file data/lines/site1.json \
-  --model yolo26m.pt \
-  --tracker bytetrack \
-  --interval 300 \
-  --conf 0.35
+#### A. Dedicated Auto-Rickshaw Counting (Custom YOLO26 Model)
+Place your video in `data/videos/` and run:
+```bash
+python -m vcount.cli run --config configs/autorickshaw.yaml --video data/videos/your_video.mp4
+```
+*(Interactive line picker opens automatically on frame 1: click start point and end point, then press Enter).*
+
+#### B. Standard Multi-Class Counting (Cars, Bikes, Buses, Trucks)
+```bash
+python -m vcount.cli run --config configs/default.yaml --video data/videos/your_video.mp4
 ```
 
 ### 2. Interactive Line Picker

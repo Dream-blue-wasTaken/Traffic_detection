@@ -158,6 +158,8 @@ def run_pipeline(
     # Bucket into intervals
     all_dirs = [cfg.counting.direction_labels.get("a_to_b", "entry"), cfg.counting.direction_labels.get("b_to_a", "exit")]
     all_classes = list(cfg.model.classes.keys())
+    if getattr(cfg.model, "autorickshaw_weights", None) and "autorickshaw" not in all_classes:
+        all_classes.append("autorickshaw")
     effective_dur = (
         info.duration_s
         if cfg.video.end_seconds is None

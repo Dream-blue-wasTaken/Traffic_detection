@@ -1,0 +1,46 @@
+model:
+  weights: "models/best.pt"      # Trained YOLO26n auto-rickshaw model
+  device: "auto"                 # "auto" | "cpu" | "cuda:0"
+  imgsz: 640                     # Benchmark-proven optimal resolution
+  conf: 0.25                     # Lower threshold to catch occluded/distant autos
+  iou: 0.45                      # NMS IoU
+  half: true                     # FP16 on GPU
+  classes:
+    autorickshaw: 0              # Trained single-class ID
+
+tracker:
+  type: "bytetrack"              # Fastest tracker proven in benchmark (71.5 FPS)
+  yaml_override: null
+  track_buffer: 60               # High buffer to connect tracks across occlusions
+
+counting:
+  line_file: null                # null = interactive line drawing on first frame
+  parallel_offset_px: 60.0
+  mode: "gated"                  # "gated" (gate line -> mid-line) | "simple"
+  min_track_frames: 3
+  count_point: "bottom_center"
+  direction_labels:
+    a_to_b: "entry"
+    b_to_a: "exit"
+  dedup_enabled: false
+  dedup_frames: 5
+  dedup_distance_px: 40.0
+
+intervals:
+  length_seconds: 300            # 5-minute time intervals
+  video_start_clock: null
+
+video:
+  frame_stride: 1
+  start_seconds: 0
+  end_seconds: null
+  resize_width: null
+
+output:
+  dir: "outputs"
+  save_video: true
+  video_codec: "mp4v"
+  draw_boxes: true
+  draw_trails: true
+  csv: true
+  json_summary: true

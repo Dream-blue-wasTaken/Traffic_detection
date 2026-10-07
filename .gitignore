@@ -2,6 +2,10 @@
 __pycache__/
 *.py[cod]
 *$py.class
+*.egg-info/
+build/
+dist/
+.ipynb_checkpoints/
 
 # Output directories & runs
 outputs/
@@ -13,6 +17,8 @@ data/videos/
 
 # Weights and models
 *.pt
+best.pt
+models/*.pt
 *.onnx
 *.engine
 

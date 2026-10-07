@@ -6,14 +6,14 @@ def test_default_config_valid():
     cfg = load_config()
     assert cfg.model.weights == "yolo26m.pt"
     assert cfg.tracker.type == "bytetrack"
-    assert cfg.counting.mode == "gated"
+    assert cfg.counting.mode == "simple"
     assert cfg.intervals.length_seconds == 900
     assert cfg.video.frame_stride == 1
 
 
 def test_load_default_yaml(tmp_path):
     cfg = load_config("configs/default.yaml")
-    assert cfg.model.conf == 0.35
+    assert cfg.model.conf == 0.25
     assert cfg.intervals.length_seconds == 900
 
 

@@ -20,6 +20,7 @@ CLASS_COLORS = {
     "bus": (0, 165, 255),        # Orange
     "truck": (50, 205, 50),      # Lime Green
     "bicycle": (255, 0, 255),    # Magenta
+    "autorickshaw": (0, 255, 255),  # Yellow
 }
 
 

@@ -97,12 +97,12 @@ def main():
     selected_model = st.sidebar.selectbox("YOLO Model Weights", model_options, index=default_model_idx)
 
     selected_tracker = st.sidebar.selectbox("Tracker Backend", ["bytetrack", "botsort"], index=0)
-    conf_threshold = st.sidebar.slider("Detection Confidence", min_value=0.10, max_value=0.85, value=0.35, step=0.05)
-    img_size = st.sidebar.selectbox("Inference Resolution (px)", [640, 960, 1280], index=1)
+    conf_threshold = st.sidebar.slider("Detection Confidence", min_value=0.10, max_value=0.85, value=0.25, step=0.05)
+    img_size = st.sidebar.selectbox("Inference Resolution (px)", [640, 960, 1280], index=0)
 
     interval_minutes = st.sidebar.selectbox("Interval Length", [1, 5, 15, 30], index=1)
-    counting_mode = st.sidebar.radio("Counting Algorithm", ["gated", "simple"], index=0)
-    gate_offset = st.sidebar.slider("Gate Line Offset (px)", min_value=20.0, max_value=120.0, value=60.0, step=5.0)
+    counting_mode = st.sidebar.radio("Counting Algorithm", ["simple", "gated"], index=0)
+    gate_offset = st.sidebar.slider("Gate Line Offset (px)", min_value=10.0, max_value=120.0, value=30.0, step=5.0)
 
     st.sidebar.subheader("Active Vehicle Classes")
     track_cars = st.sidebar.checkbox("Cars", value=True)
@@ -110,6 +110,17 @@ def main():
     track_buses = st.sidebar.checkbox("Buses", value=True)
     track_trucks = st.sidebar.checkbox("Trucks", value=True)
     track_bicycles = st.sidebar.checkbox("Bicycles", value=False)
+
+    # Ensemble Auto-Rickshaw Detection
+    has_rickshaw_model = Path("models/best.pt").is_file()
+    enable_rickshaw = False
+    if has_rickshaw_model:
+        st.sidebar.divider()
+        enable_rickshaw = st.sidebar.checkbox("🛺 Enable Auto-Rickshaw Detection", value=True)
+        if enable_rickshaw:
+            st.sidebar.success("Ensemble mode: standard YOLO + auto-rickshaw model running together")
+    else:
+        st.sidebar.caption("💡 Place trained `best.pt` in `models/` to enable auto-rickshaw detection")
 
     limit_seconds = st.sidebar.number_input("Process First N Seconds (0 = full video)", min_value=0.0, max_value=7200.0, value=0.0, step=10.0)
 
@@ -271,6 +282,9 @@ def main():
                 if track_bicycles:
                     active_classes["bicycle"] = 1
 
+                # Ensemble auto-rickshaw weights
+                rickshaw_weights = "models/best.pt" if enable_rickshaw else None
+
                 cfg = load_config(
                     overrides={
                         "model": {
@@ -278,6 +292,7 @@ def main():
                             "conf": conf_threshold,
                             "imgsz": img_size,
                             "classes": active_classes,
+                            "autorickshaw_weights": rickshaw_weights,
                         },
                         "tracker": {"type": selected_tracker},
                         "counting": {

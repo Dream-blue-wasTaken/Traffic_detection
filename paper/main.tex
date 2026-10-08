@@ -1,0 +1,72 @@
+\documentclass[conference]{IEEEtran}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{algorithm}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{listings}
+\usepackage{url}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, calc}
+\usepackage[hidelinks]{hyperref}
+
+\newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
+
+\lstset{
+  basicstyle=\ttfamily\footnotesize,
+  breaklines=true,
+  frame=single,
+  columns=fullflexible
+}
+
+\begin{document}
+
+\title{Beyond Centroid Tripwires: Robust Multi-Class Directional Vehicle Counting in Heterogeneous Traffic Using Modern YOLO and ByteTrack}
+
+\author{
+  \IEEEauthorblockN{\todo{Author One}}
+  \IEEEauthorblockA{\textit{Department of Computer Science / Civil Engineering} \\
+  \textit{\todo{Institution Name}}\\
+  \todo{City, Country} \\
+  \todo{author1@institution.edu}}
+  \and
+  \IEEEauthorblockN{\todo{Author Two}}
+  \IEEEauthorblockA{\textit{Department of Computer Science / Civil Engineering} \\
+  \textit{\todo{Institution Name}}\\
+  \todo{City, Country} \\
+  \todo{author2@institution.edu}}
+}
+
+\maketitle
+
+\begin{abstract}
+\input{sections/abstract}
+\end{abstract}
+
+\begin{IEEEkeywords}
+Intelligent Transportation Systems, Vehicle Counting, Object Detection, YOLO, Multi-Object Tracking, ByteTrack, Traffic Video Analysis, Virtual Tripwire.
+\end{IEEEkeywords}
+
+\input{sections/introduction}
+\input{sections/related_work}
+\input{sections/method}
+\input{sections/evaluation}
+\input{sections/discussion}
+\input{sections/conclusion}
+
+\section*{Acknowledgment}
+\todo{Acknowledge departmental support, funding agencies, or computational resources here if applicable.}
+
+\section*{Data and Software Availability}
+The implementation codebase (\texttt{vcount}), including configuration schemas, interactive line picking modules, pipeline execution scripts, and evaluation utilities, is available at: \todo{https://github.com/Dream-blue-wasTaken/Traffic\_detection}.
+
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\end{document}

@@ -1,0 +1,21 @@
+\section{Discussion and Limitations}
+\label{sec:discussion}
+
+The empirical findings and architectural advancements of \texttt{vcount} demonstrate significant practical improvements over classical video-based counting methods, while illuminating important trade-offs for intelligent transportation deployments.
+
+\subsection{Architectural Trade-offs in Fixed-Mount Surveillance}
+A key insight derived from our evaluation is that state-of-the-art tracking complexity does not uniformly translate to performance gains in roadside traffic monitoring. In MOT benchmarks (e.g., MOT17 and MOT20), BoT-SORT frequently outperforms ByteTrack due to camera motion compensation and dense ReID embeddings. However, as demonstrated in Section~\ref{sec:evaluation}, roadside CCTV streams are captured from rigid or pole-mounted camera brackets. Computing optical flow fields and sparse keypoint homographies across static background scenery consumes nearly one-third of the total compute budget (reducing pipeline throughput from 71.5 FPS to 47.8 FPS) while generating frequent ``insufficient matching points'' warning states. By discarding redundant motion compensation and leveraging ByteTrack's two-tiered IoU association, \texttt{vcount} achieves an optimal trade-off between computational efficiency and occlusion retention.
+
+Similarly, our resolution experiments reveal the diminishing returns of blind image upscaling. When domain-specific object detectors are trained on 640$\times$640 imagery, upscaling video inputs to 960$\times$960 degrades both latency (dropping inference from 112.2 FPS to 47.9 FPS) and high-IoU bounding box precision ($mAP@50$--$95$ decreases from 73.11\% to 69.04\%). Operating at native training resolution maximizes throughput while preserving high detection recall across partially visible vehicles.
+
+\subsection{Threats to Validity and System Limitations}
+To provide an honest and rigorous engineering assessment, we identify four primary limitations observed during system design and testing:
+\begin{enumerate}
+    \item \textbf{Rigid Camera Geometry Assumption}: The virtual gate coordinates $(\mathcal{L}_{\text{mid}}, \mathcal{L}_A, \mathcal{L}_B)$ are configured statically on the initial video frame. While suitable for firmly mounted municipal surveillance cameras, the system does not dynamically compensate for severe wind-induced mast oscillation or intentional Pan-Tilt-Zoom (PTZ) reorientations. In uncalibrated dynamic cameras, virtual lines may drift relative to physical road lanes.
+    \item \textbf{Extreme Standstill Congestion}: When traffic grinds to a complete halt, vehicles may come to rest directly straddling the virtual mid-line. Under extended standstill periods exceeding the track cleanup threshold ($N_{\text{stale}} = 150$ frames), track states may be pruned, creating the risk of re-identification count duplication when traffic resumes motion.
+    \item \textbf{Ensemble Computational Scaling}: While the dual-model ensemble effectively detects regional transit vehicles (e.g., auto-rickshaws) alongside standard passenger traffic, executing two concurrent neural forward passes roughly doubles GPU memory bandwidth requirements. On highly constrained edge microcomputers (such as low-power single-board computers), multi-model pipelines require careful model quantization (e.g., INT8 TensorRT) to sustain real-time operation.
+    \item \textbf{Ground-Contact Heuristic Approximation}: Tracking the bottom-center point $(x_{\text{mid}}, y_{\text{max}})$ provides an effective, parameter-free proxy for tire-road contact in typical nadir and oblique CCTV angles. However, for vehicles traversing sharp banked curves or under extreme foreshortening, the bottom of the bounding box may deviate slightly from the true contact centroid.
+\end{enumerate}
+
+\subsection{Privacy and Societal Considerations}
+Unlike automatic license plate recognition (ALPR) or facial recognition surveillance networks, \texttt{vcount} operates in a privacy-preserving regime. The system extracts only abstract geometric bounding boxes, modal classifications, and anonymous tracking identifiers. No facial features, vehicle license plates, or individual tracking histories are persisted or transmitted, adhering strictly to emerging municipal data privacy standards.

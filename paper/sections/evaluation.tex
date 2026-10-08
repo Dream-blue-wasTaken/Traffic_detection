@@ -1,0 +1,96 @@
+\section{Experimental Evaluation}
+\label{sec:evaluation}
+
+To evaluate the operational efficacy and latency characteristics of the proposed system, we conducted empirical experiments investigating input resolution trade-offs, multi-object tracking throughput, and statistical agreement against ground truth.
+
+\subsection{Experimental Setup}
+The benchmarking environment and hardware specifications are summarized in Table~\ref{tab:hardware_env}. All neural inference and tracking benchmarks were evaluated on an NVIDIA Tesla T4 GPU (15~GB VRAM) running CUDA 13.0 and PyTorch 2.11.0, with baseline CPU validation conducted under PyTorch 2.13.0 on an Intel x86\_64 host architecture.
+
+\begin{table}[ht]
+\centering
+\caption{Benchmarking Environment Specifications}
+\label{tab:hardware_env}
+\begin{tabular}{ll}
+\toprule
+\textbf{Parameter} & \textbf{Specification} \\
+\midrule
+GPU Hardware & NVIDIA Tesla T4 (15 GB GDDR6 VRAM) \\
+CUDA / PyTorch & CUDA 13.0 / PyTorch 2.11.0 \\
+Base Architecture & YOLO26 Nano (\texttt{yolo26n.pt}, 120 layers) \\
+Model Parameters & 2,375,031 parameters (5.3 GFLOPs) \\
+Precision & Half-precision FP16 enabled \\
+Domain Dataset & Auto-Rickshaw-Annotation-7 (1,001 images, CC BY 4.0) \\
+Surveillance Target & Multi-class roadway CCTV streams (29.97 FPS) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Experiment 1: Input Resolution Trade-Off ($640$ vs $960$)}
+A core engineering design choice in roadside video analysis is the trade-off between input spatial resolution and inference latency. Upscaling input frames to higher resolutions (e.g., $960 \times 960$) is often hypothesized to improve the detection of small, distant vehicles at the horizon, but comes at substantial computational cost.
+
+We evaluated the fine-tuned detector on the independent validation split across two standard operating resolutions: $640 \times 640$ and $960 \times 960$. Quantitative results are presented in Table~\ref{tab:resolution_benchmark} and visually depicted in Fig.~\ref{fig:benchmark_results}(a).
+
+\begin{table}[ht]
+\centering
+\caption{Input Resolution Accuracy and Latency Comparison (Tesla T4)}
+\label{tab:resolution_benchmark}
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{Resolution} & \textbf{mAP@50} & \textbf{mAP@50-95} & \textbf{Prec.} & \textbf{Rec.} & \textbf{Latency} & \textbf{FPS} \\
+\midrule
+\textbf{640 $\times$ 640} & \textbf{0.9950} & \textbf{0.7311} & \textbf{0.9883} & \textbf{1.000} & \textbf{8.91 ms} & \textbf{112.2} \\
+960 $\times$ 960 & 0.9950 & 0.6904 & 0.9730 & 1.000 & 20.87 ms & 47.9 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=\columnwidth]{figures/benchmark_eval_results.png}
+\caption{Empirical evaluation results: (a) Input resolution speed vs. accuracy trade-off, showing Pareto dominance of $640\times 640$; (b) End-to-end video streaming throughput across multi-object tracking architectures.}
+\label{fig:benchmark_results}
+\end{figure}
+
+The empirical findings demonstrate clear Pareto dominance for $640 \times 640$:
+\begin{itemize}
+    \item \textbf{Inference Speedup}: Operating at $640 \times 640$ requires only $8.91$~ms per frame (yielding 112.2 inference FPS), representing a \textbf{2.34$\times$ speedup} over $960 \times 960$ ($20.87$~ms, 47.9 FPS).
+    \item \textbf{Bounding-Box Fidelity}: While both resolutions achieve a 99.5\% mAP@50 and 100\% recall, $640 \times 640$ attains higher mAP@50--95 (73.11\% vs 69.04\%) and higher precision (98.83\% vs 97.30\%). Because source training images were natively captured at 640px, upscaling introduces spatial interpolation blur without providing additional high-frequency semantic features.
+\end{itemize}
+
+\subsection{Experiment 2: Multi-Object Tracker Throughput}
+We next evaluated the end-to-end video processing throughput across tracking algorithms. We compared ByteTrack against BoT-SORT under identical detection inputs across both spatial resolutions. Results are reported in Table~\ref{tab:tracker_benchmark} and Fig.~\ref{fig:benchmark_results}(b).
+
+\begin{table}[ht]
+\centering
+\caption{End-to-End Pipeline Throughput Across Trackers (Tesla T4)}
+\label{tab:tracker_benchmark}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Tracker} & \textbf{Resolution} & \textbf{Pipeline FPS} & \textbf{Total Time} & \textbf{Rel. Speed} \\
+\midrule
+\textbf{ByteTrack} & \textbf{640px} & \textbf{71.5 FPS} & \textbf{2.10 s} & \textbf{1.00$\times$ (Fastest)} \\
+ByteTrack & 960px & 55.0 FPS & 2.73 s & 0.77$\times$ \\
+BoT-SORT & 640px & 47.8 FPS & 3.14 s & 0.67$\times$ \\
+BoT-SORT & 960px & 45.1 FPS & 3.32 s & 0.63$\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+As shown in Table~\ref{tab:tracker_benchmark}, \textbf{ByteTrack @ 640px} delivers the highest end-to-end pipeline throughput at \textbf{71.5 FPS}, outperforming BoT-SORT @ 640px (47.8 FPS) by \textbf{49.6\%}. 
+
+The latency discrepancy stems from BoT-SORT's Global Motion Compensation (GMC) module. BoT-SORT executes sparse optical flow or ORB keypoint extraction across consecutive frames to compensate for dynamic camera motion. For stationary roadside surveillance cameras, this optical flow computation represents pure computational overhead that yields no tangible tracking gain while degrading pipeline throughput by nearly half. Because ByteTrack comfortably surpasses the real-time threshold of 30 FPS by more than $2.3\times$, it represents the optimal configuration for continuous roadside deployment.
+
+\subsection{Statistical Ground-Truth Evaluation Methodology}
+To validate automated counts against human baseline measurements without falling victim to misleading Pearson correlation artifacts, \texttt{vcount} incorporates a rigorous three-tiered statistical evaluation module:
+\begin{enumerate}
+    \item \textbf{Count Accuracy and Directional Bias}:
+    \begin{align}
+        \text{Accuracy (\%)} &= \max\left(0, \, 100 - \frac{|V_{\text{auto}} - V_{\text{manual}}|}{V_{\text{manual}}} \times 100\right) \\
+        \text{Signed Error (\%)} &= \frac{V_{\text{auto}} - V_{\text{manual}}}{V_{\text{manual}}} \times 100
+    \end{align}
+    A negative signed error directly identifies the systematic undercounting phenomenon documented by Majumder and Wilmot~\cite{majumder2023automated}.
+    \item \textbf{Greedy Bipartite Event Matching}: Individual crossing events are matched against ground-truth logs within an allowable temporal window $\tau_{\text{tol}} = 2.0$ seconds. Let $M$ denote matched true positives, $FP$ false positives, and $FN$ false negatives. Precision ($P = \frac{M}{M+FP}$), Recall ($R = \frac{M}{M+FN}$), and $F_1 = \frac{2PR}{P+R}$ quantify event-level temporal fidelity.
+    \item \textbf{Bland--Altman Agreement and Paired $t$-Test}: Following Bland and Altman~\cite{bland1986statistical}, differences $d_i = V_{\text{auto}, i} - V_{\text{manual}, i}$ across $K$ consecutive time intervals are plotted against their mean values $\frac{V_{\text{auto}, i} + V_{\text{manual}, i}}{2}$. The mean difference $\bar{d}$ estimates fixed systematic bias, while the 95\% limits of agreement $[\bar{d} - 1.96 s_d, \, \bar{d} + 1.96 s_d]$ bound expected operational discrepancies. A paired two-tailed Student's $t$-test assesses the null hypothesis $H_0: \mu_d = 0$.
+\end{enumerate}
+
+In test video evaluations covering 298 video frames across 9.94 seconds of multi-lane arterial traffic (768$\times$432 resolution), \texttt{vcount} registered 14 verified crossing events (9 passenger cars, 5 motorcycles) in real-time execution, achieving 100\% directional classification consistency with zero duplicate counts under our 5-frame spatial deduplication window.

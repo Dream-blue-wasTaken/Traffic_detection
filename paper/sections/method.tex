@@ -1,0 +1,166 @@
+\section{System Architecture and Methodology}
+\label{sec:method}
+
+The proposed \texttt{vcount} architecture processes arbitrary pre-recorded roadside video streams through a modular, deterministic pipeline. As illustrated in Fig.~\ref{fig:pipeline_architecture}, the system decouples spatial trajectory estimation from temporal interval aggregation, mitigating the systematic undercounting and drift vulnerabilities present in prior formulations.
+
+\begin{figure*}[t]
+\centering
+\begin{tikzpicture}[
+  node distance=1.1cm and 0.8cm,
+  box/.style={rectangle, draw=blue!70, fill=blue!5, thick, rounded corners, minimum width=2.2cm, minimum height=1.0cm, align=center, font=\footnotesize},
+  subbox/.style={rectangle, draw=teal!70, fill=teal!5, thick, rounded corners, minimum width=2.2cm, minimum height=1.0cm, align=center, font=\footnotesize},
+  arrow/.style={-{Stealth[length=2.5mm]}, thick, draw=black!80}
+]
+
+% Nodes
+\node[box] (input) {Input Video\\Stream ($\mathcal{V}, \text{FPS}$)};
+\node[box, right=of input] (detect) {YOLO Object\\Detector};
+\node[box, right=of detect] (tracker) {ByteTrack State\\Association};
+\node[subbox, right=of tracker] (geom) {Ground-Contact\\Reference Point};
+\node[subbox, below=1.2cm of geom] (gate) {Signed-Distance\\Tripwire Gate};
+\node[subbox, left=of gate] (voting) {Confidence-Weighted\\Majority Voting};
+\node[box, left=of voting] (interval) {Video-Timestamp\\Interval Binning};
+\node[box, left=of interval] (output) {Reports \& HUD\\(CSV, JSON, MP4)};
+
+% Arrows
+\draw[arrow] (input) -- node[above, font=\scriptsize] {Frame $k$} (detect);
+\draw[arrow] (detect) -- node[above, font=\scriptsize] {$\{\mathbf{b}_i, c_i, s_i\}$} (tracker);
+\draw[arrow] (tracker) -- node[above, font=\scriptsize] {Tracklet $\mathcal{T}_j$} (geom);
+\draw[arrow] (geom) -- node[right, font=\scriptsize] {$\mathbf{p}_j = (x_{\text{mid}}, y_{\text{max}})$} (gate);
+\draw[arrow] (gate) -- node[above, font=\scriptsize] {Crossing Event} (voting);
+\draw[arrow] (voting) -- node[above, font=\scriptsize] {$\hat{c}_j, \text{dir}_j$} (interval);
+\draw[arrow] (interval) -- node[above, font=\scriptsize] {$t_k = k / \text{FPS}$} (output);
+
+\end{tikzpicture}
+\caption{End-to-end pipeline architecture of \texttt{vcount}. Frames flow sequentially through deep detection, dual-threshold tracking, ground-contact point projection, signed-distance virtual tripwire evaluation, trajectory-span majority voting, and video-timestamp interval aggregation.}
+\label{fig:pipeline_architecture}
+\end{figure*}
+
+\subsection{Video Stream Ingestion and Temporal Invariance}
+Given a video stream $\mathcal{V}$ characterized by frame width $W$, height $H$, frame rate $\phi \in \mathbb{R}^+$ (FPS), and total frames $N$, each individual frame is indexed by integer $k \in \{0, 1, \dots, N-1\}$. In existing implementations~\cite{majumder2023automated}, processing speed fluctuations distorted interval binning because timestamps were derived from the host workstation's system clock. To guarantee temporal invariance across diverse computing environments (e.g., cloud GPUs versus embedded edge nodes), \texttt{vcount} derives all event timestamps strictly from the intrinsic frame index:
+\begin{equation}
+    t_k = \frac{k}{\phi}
+    \label{eq:timestamp}
+\end{equation}
+This formulation ensures that a 15-minute aggregation window precisely spans $900\phi$ video frames regardless of whether inference executes at 5 FPS or 120 FPS.
+
+\subsection{Multi-Class Object Detection and Ensemble Integration}
+For each frame $I_k \in \mathbb{R}^{H \times W \times 3}$, a single-stage YOLO detector predicts bounding box coordinates, class category assignments, and confidence scores:
+\begin{equation}
+    \mathcal{D}_k = \left\{ \left(\mathbf{b}_i, c_i, s_i\right) \mid s_i \geq \tau_{\text{conf}} \right\}_{i=1}^{M_k}
+\end{equation}
+where $\mathbf{b}_i = (x_1, y_1, x_2, y_2)$ represents the bounding box coordinates, $c_i \in \mathcal{C}$ denotes the predicted vehicle category, $s_i \in [0, 1]$ is the detection confidence score, and $\tau_{\text{conf}}$ is the detection threshold. The standard taxonomy $\mathcal{C}$ encompasses four primary COCO categories: \textit{car}, \textit{motorcycle}, \textit{bus}, and \textit{truck}.
+
+To accommodate heterogeneous regional traffic environments comprising non-standard transit modes (e.g., auto-rickshaws, motorized three-wheelers), the architecture supports an optional dual-model ensemble. A secondary domain-adapted model predicts specialized target boxes $\mathcal{D}_k'$. The primary and domain-adapted predictions are fused via cross-model Intersection-over-Union (IoU) suppression: if a standard vehicle detection overlaps with a specialized prediction such that $\text{IoU}(\mathbf{b}_i, \mathbf{b}_j') > \tau_{\text{cross}}$ (with $\tau_{\text{cross}} = 0.40$), the generic detection is suppressed in favor of the specialized class. Tracklet identifiers for the specialized model are partitioned into a disjoint integer namespace ($\text{ID} \ge 100{,}000$) to eliminate track collision.
+
+\subsection{Occlusion-Resilient Tracklet Association via ByteTrack}
+Standard tracking algorithms (such as SORT~\cite{bewley2016sort}) apply a high confidence threshold $\tau_{\text{high}}$ and discard all lower-confidence detections, leading directly to the systematic undercounting identified by Majumder and Wilmot~\cite{majumder2023automated}. In real-world multi-lane traffic, vehicles passing under street poles, trees, or adjacent high-sided trucks frequently experience partial occlusion, dropping detection confidence temporarily.
+
+To preserve trajectory continuity, \texttt{vcount} integrates ByteTrack~\cite{zhang2022bytetrack}. Detections in frame $k$ are partitioned into high-confidence detections $\mathcal{D}_{\text{high}} = \{d \in \mathcal{D}_k \mid s_d \ge \tau_{\text{high}}\}$ and low-confidence detections $\mathcal{D}_{\text{low}} = \{d \in \mathcal{D}_k \mid \tau_{\text{low}} \le s_d < \tau_{\text{high}}\}$, with default parameters $\tau_{\text{high}} = 0.25$ and $\tau_{\text{low}} = 0.10$. Active tracklets $\mathcal{T}$ predicted by Kalman filters are first associated with $\mathcal{D}_{\text{high}}$ using spatial IoU distance via the Hungarian algorithm~\cite{kuhn1955hungarian}. Unmatched tracklets $\mathcal{T}_{\text{remain}}$ are subsequently associated with $\mathcal{D}_{\text{low}}$. This two-tiered association recovers temporarily occluded vehicles and prevents premature tracklet termination across multi-lane roadway surfaces.
+
+\subsection{Ground-Contact Point Projection}
+In elevated roadside video cameras, vehicle tracking based on bounding box centroids $(\frac{x_1+x_2}{2}, \frac{y_1+y_2}{2})$ suffers from severe vertical parallax. Because the roofline of a tall vehicle (such as a 3.5-meter commercial truck or bus) is positioned substantially higher in 3D space than the pavement plane, perspective projection causes the box centroid to cross virtual roadway lines long before the vehicle's physical wheels reach the counting transect.
+
+To eliminate perspective parallax, \texttt{vcount} computes the ground-contact reference point $\mathbf{p} = (p_x, p_y)$ as the bottom-center of the bounding box:
+\begin{equation}
+    p_x = \frac{x_1 + x_2}{2}, \quad p_y = y_2
+    \label{eq:ground_contact}
+\end{equation}
+Under standard planar roadway geometry, $y_2$ aligns directly with the tire-road contact patch, ensuring accurate spatial synchronization between the vehicle footprint and virtual pavement markers.
+
+\subsection{Signed-Distance Virtual Gate Geometry}
+The virtual counting transect is specified by an interactive mid-line $\mathcal{L}_{\text{mid}}$ defined by endpoints $\mathbf{a} = (x_1, y_1)$ and $\mathbf{b} = (x_2, y_2)$. The oriented line vector is $\mathbf{v} = (x_2 - x_1, y_2 - y_1)$ with Euclidean length $L = \|\mathbf{v}\|_2 = \sqrt{(x_2-x_1)^2 + (y_2-y_1)^2}$.
+
+The signed side of an arbitrary point $\mathbf{p} = (p_x, p_y)$ relative to the directed line is computed using the 2D cross product:
+\begin{equation}
+    \sigma(\mathbf{p}, \mathcal{L}_{\text{mid}}) = (x_2 - x_1)(p_y - y_1) - (y_2 - y_1)(p_x - x_1)
+    \label{eq:cross_product}
+\end{equation}
+The signed perpendicular Euclidean distance from $\mathbf{p}$ to $\mathcal{L}_{\text{mid}}$ is given by:
+\begin{equation}
+    d(\mathbf{p}, \mathcal{L}_{\text{mid}}) = \frac{\sigma(\mathbf{p}, \mathcal{L}_{\text{mid}})}{L}
+\end{equation}
+where $d > 0$ defines the positive half-plane (Side B) and $d < 0$ defines the negative half-plane (Side A).
+
+To determine travel direction, two parallel virtual gate lines $\mathcal{L}_A$ and $\mathcal{L}_B$ are automatically generated at a perpendicular offset distance $\delta \in \mathbb{R}^+$ (default $\delta = 60$ pixels) along the unit normal vector $\hat{\mathbf{n}} = (-\frac{y_2-y_1}{L}, \frac{x_2-x_1}{L})$:
+\begin{align}
+    \mathcal{L}_A &= \left\{ \mathbf{a} - \delta \hat{\mathbf{n}}, \, \mathbf{b} - \delta \hat{\mathbf{n}} \right\} \\
+    \mathcal{L}_B &= \left\{ \mathbf{a} + \delta \hat{\mathbf{n}}, \, \mathbf{b} + \delta \hat{\mathbf{n}} \right\}
+\end{align}
+
+\begin{algorithm}[t]
+\caption{Directional Line Crossing and State Verification}
+\label{alg:crossing}
+\begin{algorithmic}[1]
+\REQUIRE Track state $\mathcal{S}_j$, current point $\mathbf{p}_j$, mid-line $\mathcal{L}_{\text{mid}}$, offset $\delta$, min frames $N_{\text{min}}$
+\ENSURE Newly triggered CountEvent or $\varnothing$
+\STATE $d_{\text{curr}} \leftarrow d(\mathbf{p}_j, \mathcal{L}_{\text{mid}})$; \quad $\sigma_{\text{curr}} \leftarrow \sigma(\mathbf{p}_j, \mathcal{L}_{\text{mid}})$
+\IF{$\mathcal{S}_j.\text{counted} = \mathbf{true}$}
+    \STATE $\mathcal{S}_j.\mathbf{p}_{\text{last}} \leftarrow \mathbf{p}_j$; \quad \textbf{return} $\varnothing$
+\ENDIF
+\STATE $\mathcal{S}_j.\text{votes}[c_j] \leftarrow \mathcal{S}_j.\text{votes}[c_j] + s_j$
+\IF{$\mathcal{S}_j.\text{gate\_touched} = \mathbf{nil}$}
+    \IF{$d_{\text{curr}} \le -\delta$}
+        \STATE $\mathcal{S}_j.\text{gate\_touched} \leftarrow \text{`A'}$
+    \ELSIF{$d_{\text{curr}} \ge +\delta$}
+        \STATE $\mathcal{S}_j.\text{gate\_touched} \leftarrow \text{`B'}$
+    \ENDIF
+\ENDIF
+\IF{$\mathcal{S}_j.n_{\text{frames}} < N_{\text{min}}$ \OR $\mathcal{S}_j.\mathbf{p}_{\text{last}} = \mathbf{nil}$}
+    \STATE $\mathcal{S}_j.\mathbf{p}_{\text{last}} \leftarrow \mathbf{p}_j$; \quad \textbf{return} $\varnothing$
+\ENDIF
+\STATE $\text{crossed} \leftarrow \mathbf{false}$
+\IF{$|d_{\text{curr}}| \ge 1.5$}
+    \IF{$\mathcal{S}_j.\sigma_{\text{last}} < 0 \land \sigma_{\text{curr}} > 0$}
+        \STATE $\text{crossed} \leftarrow \mathbf{true}$; \quad $\text{dir} \leftarrow \text{`A}\to\text{B'}$
+    \ELSIF{$\mathcal{S}_j.\sigma_{\text{last}} > 0 \land \sigma_{\text{curr}} < 0$}
+        \STATE $\text{crossed} \leftarrow \mathbf{true}$; \quad $\text{dir} \leftarrow \text{`B}\to\text{A'}$
+    \ENDIF
+\ENDIF
+\IF{$\text{crossed} = \mathbf{true}$}
+    \STATE \textit{/* Gate verification with fallback */}
+    \IF{$\mathcal{S}_j.\text{gate\_touched} = \text{`A'} \land \text{dir} = \text{`A}\to\text{B'}$}
+        \STATE $\text{valid} \leftarrow \mathbf{true}$
+    \ELSIF{$\mathcal{S}_j.\text{gate\_touched} = \text{`B'} \land \text{dir} = \text{`B}\to\text{A'}$}
+        \STATE $\text{valid} \leftarrow \mathbf{true}$
+    \ELSIF{$\mathcal{S}_j.\text{gate\_touched} = \mathbf{nil}$}
+        \STATE $\text{valid} \leftarrow \mathbf{true}$ \textit{/* Fallback for late track acquisition */}
+    \ELSE
+        \STATE $\text{valid} \leftarrow \mathbf{false}$
+    \ENDIF
+    \IF{$\text{valid} = \mathbf{true}$}
+        \STATE $\hat{c} \leftarrow \arg\max_{c} \mathcal{S}_j.\text{votes}[c]$
+        \STATE $\mathcal{S}_j.\text{counted} \leftarrow \mathbf{true}$
+        \STATE \textbf{return} $\text{CountEvent}(j, \hat{c}, \text{dir}, k, t_k, \mathbf{p}_j)$
+    \ENDIF
+\ENDIF
+\STATE $\mathcal{S}_j.\mathbf{p}_{\text{last}} \leftarrow \mathbf{p}_j$
+\IF{$|d_{\text{curr}}| \ge 1.5$}
+    \STATE $\mathcal{S}_j.\sigma_{\text{last}} \leftarrow \sigma_{\text{curr}}$
+\ENDIF
+\STATE \textbf{return} $\varnothing$
+\end{algorithmic}
+\end{algorithm}
+
+The crossing detection logic is formalized in Algorithm~\ref{alg:crossing}. To eliminate false triggers caused by single-frame tracking noise near the boundary, a hysteresis margin of $1.5$ pixels is enforced. 
+
+Crucially, \texttt{vcount} incorporates a \textit{fallback crossing protocol}: in the baseline system of~\cite{majumder2023automated}, any vehicle that materialized or had its track initiated between an outer gate line and the mid-line was discarded forever, directly causing systematic undercounts during congested conditions. Algorithm~\ref{alg:crossing} permits crossing verification if the directional signs flip reliably even when $\mathcal{S}_j.\text{gate\_touched}$ is null, successfully reclaiming trajectories that enter the camera frame close to the mid-line.
+
+\subsection{Confidence-Weighted Majority Class Voting}
+Due to viewpoint changes, transient shadows, and scale variations, deep neural networks occasionally exhibit class flickering across frames (e.g., oscillating between \textit{truck} and \textit{bus}). Rather than assigning the instantaneous class label at the exact frame of line crossing, \texttt{vcount} accumulates confidence weights throughout the entire lifespan of tracklet $\mathcal{T}_j$:
+\begin{equation}
+    \hat{c}_j = \arg\max_{c \in \mathcal{C}} \sum_{m=1}^{N_j} s_{j, m} \cdot \mathbb{I}(c_{j, m} = c)
+    \label{eq:majority_vote}
+\end{equation}
+where $\mathbb{I}(\cdot)$ is the indicator function, $s_{j, m}$ is the confidence score of tracklet $j$ at frame $m$, and $N_j$ is the total number of frames in which tracklet $j$ was observed. This cumulative voting robustly dampens intermittent classification errors.
+
+\subsection{Temporal Interval Aggregation and Export}
+Let $\mathcal{E} = \{e_1, e_2, \dots, e_E\}$ denote the ordered set of verified crossing events recorded across video duration $T = N/\phi$. For a user-configured aggregation duration $\Delta T$ (e.g., $\Delta T = 900$ seconds for 15-minute intervals), the timeline is partitioned into $K = \lceil T / \Delta T \rceil$ discrete intervals. Each event $e = (j, \hat{c}, \text{dir}, k, t, \mathbf{p})$ is mapped into interval bin index:
+\begin{equation}
+    \kappa(e) = \min\left( \left\lfloor \frac{t}{\Delta T} \right\rfloor, \, K - 1 \right)
+\end{equation}
+The aggregated volume tally for interval $\kappa$, direction $d$, and class $c$ is:
+\begin{equation}
+    V(\kappa, d, c) = \sum_{e \in \mathcal{E}} \mathbb{I}(\kappa(e) = \kappa \land e.\text{dir} = d \land e.\hat{c} = c)
+\end{equation}
+These tallies are automatically exported to standardized CSV formats (both long-tidy and wide pivot structures), JSON execution summaries, and high-resolution annotated video streams equipped with real-time heads-up-display (HUD) counters and directional breadcrumb trails.

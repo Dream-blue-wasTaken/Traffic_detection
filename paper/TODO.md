@@ -31,13 +31,28 @@ This checklist tracks author-specific fields and pre-submission tasks for the ma
 
 ---
 
-### 4. Overleaf Compilation Instructions
+### 4. Validation Split Sizes (High Priority — reviewer flagged)
+- [ ] **Add exact train/val split sizes** to Table I or the Experiment 1 text. The current text references this but the table doesn't include it. Report the number of training images and validation images used in the Auto-Rickshaw-Annotation-7 split.
+
+---
+
+### 5. Future Experimental Work (Critical — reviewer flagged)
+The following experiments were identified as necessary for a full validation paper:
+- [ ] **Ground-truth counting evaluation**: Multiple clips, manual event annotation, Bland-Altman/F1 analysis
+- [ ] **Ablation studies**: centroid vs. bottom-center, fallback on/off, voting vs. last-frame class, ByteTrack vs. SORT
+- [ ] **GMC isolation ablation**: Disable only GMC within BoT-SORT to isolate its throughput cost
+- [ ] **Ensemble benchmarking**: Dual-model ensemble counting accuracy and throughput
+- [ ] **Verify claims about [1]**: Cross-check ~90% accuracy, 1.7h/hr processing, wall-clock binning against the original Majumder & Wilmot paper
+
+---
+
+### 6. Overleaf Compilation Instructions
 1. Compress the `paper/` directory into a zip archive (`paper.zip`).
-2. Log into [Overleaf](https://www.overleaf.com) $\rightarrow$ Click **New Project** $\rightarrow$ **Upload Project** $\rightarrow$ Select `paper.zip`.
+2. Log into [Overleaf](https://www.overleaf.com) → Click **New Project** → **Upload Project** → Select `paper.zip`.
 3. Verify that the compiler is set to **pdfLaTeX** and the main document is set to `main.tex`.
 4. Click **Recompile** (compile twice to resolve citation cross-references and figure labels).
 
 ---
 
-### 5. Ethical and AI-Assisted Writing Disclosure Reminder
+### 7. Ethical and AI-Assisted Writing Disclosure Reminder
 - IEEE policy mandates that authors take full scientific responsibility for the accuracy and integrity of their manuscript. If required by your target venue, include an AI-assisted writing disclosure in the manuscript or submission form according to IEEE author guidelines.

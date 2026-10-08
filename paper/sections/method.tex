@@ -59,14 +59,14 @@ Standard tracking algorithms (such as SORT~\cite{bewley2016sort}) apply a high c
 To preserve trajectory continuity, \texttt{vcount} integrates ByteTrack~\cite{zhang2022bytetrack}. Detections in frame $k$ are partitioned into high-confidence detections $\mathcal{D}_{\text{high}} = \{d \in \mathcal{D}_k \mid s_d \ge \tau_{\text{high}}\}$ and low-confidence detections $\mathcal{D}_{\text{low}} = \{d \in \mathcal{D}_k \mid \tau_{\text{low}} \le s_d < \tau_{\text{high}}\}$, with default parameters $\tau_{\text{high}} = 0.25$ and $\tau_{\text{low}} = 0.10$. Active tracklets $\mathcal{T}$ predicted by Kalman filters are first associated with $\mathcal{D}_{\text{high}}$ using spatial IoU distance via the Hungarian algorithm~\cite{kuhn1955hungarian}. Unmatched tracklets $\mathcal{T}_{\text{remain}}$ are subsequently associated with $\mathcal{D}_{\text{low}}$. This two-tiered association recovers temporarily occluded vehicles and prevents premature tracklet termination across multi-lane roadway surfaces.
 
 \subsection{Ground-Contact Point Projection}
-In elevated roadside video cameras, vehicle tracking based on bounding box centroids $(\frac{x_1+x_2}{2}, \frac{y_1+y_2}{2})$ suffers from severe vertical parallax. Because the roofline of a tall vehicle (such as a 3.5-meter commercial truck or bus) is positioned substantially higher in 3D space than the pavement plane, perspective projection causes the box centroid to cross virtual roadway lines long before the vehicle's physical wheels reach the counting transect.
+In elevated roadside video cameras, vehicle tracking based on bounding box centroids $(\frac{x_1+x_2}{2}, \frac{y_1+y_2}{2})$ suffers from vertical parallax. Because the roofline of a tall vehicle (such as a 3.5-meter commercial truck or bus) is positioned substantially higher in 3D space than the pavement plane, perspective projection causes the box centroid to deviate from the roadway surface. For approaching vehicles the centroid crosses the tripwire prematurely; for receding vehicles the crossing is delayed. In both cases the mismatch introduces systematic timing errors.
 
-To eliminate perspective parallax, \texttt{vcount} computes the ground-contact reference point $\mathbf{p} = (p_x, p_y)$ as the bottom-center of the bounding box:
+To reduce this perspective-induced offset, \texttt{vcount} computes the ground-contact reference point $\mathbf{p} = (p_x, p_y)$ as the bottom-center of the bounding box:
 \begin{equation}
     p_x = \frac{x_1 + x_2}{2}, \quad p_y = y_2
     \label{eq:ground_contact}
 \end{equation}
-Under standard planar roadway geometry, $y_2$ aligns directly with the tire-road contact patch, ensuring accurate spatial synchronization between the vehicle footprint and virtual pavement markers.
+Under standard planar roadway geometry, $y_2$ more closely approximates the tire-road contact patch than the box centroid, improving spatial alignment between the tracked point and virtual pavement markers. This heuristic remains an approximation: under extreme camera foreshortening or on banked curves, the bottom of the bounding box may still deviate from the true contact point.
 
 \subsection{Signed-Distance Virtual Gate Geometry}
 The virtual counting transect is specified by an interactive mid-line $\mathcal{L}_{\text{mid}}$ defined by endpoints $\mathbf{a} = (x_1, y_1)$ and $\mathbf{b} = (x_2, y_2)$. The oriented line vector is $\mathbf{v} = (x_2 - x_1, y_2 - y_1)$ with Euclidean length $L = \|\mathbf{v}\|_2 = \sqrt{(x_2-x_1)^2 + (y_2-y_1)^2}$.
@@ -82,17 +82,18 @@ The signed perpendicular Euclidean distance from $\mathbf{p}$ to $\mathcal{L}_{\
 \end{equation}
 where $d > 0$ defines the positive half-plane (Side B) and $d < 0$ defines the negative half-plane (Side A).
 
-To determine travel direction, two parallel virtual gate lines $\mathcal{L}_A$ and $\mathcal{L}_B$ are automatically generated at a perpendicular offset distance $\delta \in \mathbb{R}^+$ (default $\delta = 60$ pixels) along the unit normal vector $\hat{\mathbf{n}} = (-\frac{y_2-y_1}{L}, \frac{x_2-x_1}{L})$:
+To determine travel direction, two parallel virtual gate lines $\mathcal{L}_A$ and $\mathcal{L}_B$ are automatically generated at a perpendicular offset distance $\delta \in \mathbb{R}^+$ (default $\delta = 60$ pixels at $768 \times 432$ resolution; this value should be recalibrated for other resolutions and scene geometries) along the unit normal vector $\hat{\mathbf{n}} = (-\frac{y_2-y_1}{L}, \frac{x_2-x_1}{L})$:
 \begin{align}
     \mathcal{L}_A &= \left\{ \mathbf{a} - \delta \hat{\mathbf{n}}, \, \mathbf{b} - \delta \hat{\mathbf{n}} \right\} \\
     \mathcal{L}_B &= \left\{ \mathbf{a} + \delta \hat{\mathbf{n}}, \, \mathbf{b} + \delta \hat{\mathbf{n}} \right\}
 \end{align}
+Note that $\delta$ is specified in pixels and therefore resolution-dependent; pixel-parallel lines are not equidistant in physical road space under perspective projection.
 
 \begin{algorithm}[t]
 \caption{Directional Line Crossing and State Verification}
 \label{alg:crossing}
 \begin{algorithmic}[1]
-\REQUIRE Track state $\mathcal{S}_j$, current point $\mathbf{p}_j$, mid-line $\mathcal{L}_{\text{mid}}$, offset $\delta$, min frames $N_{\text{min}}$
+\REQUIRE Track state $\mathcal{S}_j$ (initialized with $\text{counted} \leftarrow \mathbf{false}$, $\text{gate\_touched} \leftarrow \mathbf{nil}$, $\sigma_{\text{last}} \leftarrow 0$, $n_{\text{frames}} \leftarrow 0$, $\text{votes} \leftarrow \{\}$), current point $\mathbf{p}_j$, mid-line $\mathcal{L}_{\text{mid}}$, offset $\delta$, min frames $N_{\text{min}} = 5$
 \ENSURE Newly triggered CountEvent or $\varnothing$
 \STATE $d_{\text{curr}} \leftarrow d(\mathbf{p}_j, \mathcal{L}_{\text{mid}})$; \quad $\sigma_{\text{curr}} \leftarrow \sigma(\mathbf{p}_j, \mathcal{L}_{\text{mid}})$
 \IF{$\mathcal{S}_j.\text{counted} = \mathbf{true}$}
@@ -142,23 +143,24 @@ To determine travel direction, two parallel virtual gate lines $\mathcal{L}_A$ a
 \end{algorithmic}
 \end{algorithm}
 
-The crossing detection logic is formalized in Algorithm~\ref{alg:crossing}. To eliminate false triggers caused by single-frame tracking noise near the boundary, a hysteresis margin of $1.5$ pixels is enforced. 
+The crossing detection logic is formalized in Algorithm~\ref{alg:crossing}. To suppress false triggers caused by single-frame tracking noise near the boundary, a hysteresis margin of $1.5$ pixels on the signed distance is enforced: the signed cross product $\sigma_{\text{last}}$ is only updated when $|d_{\text{curr}}| \ge 1.5$ (line~38--39), preventing oscillating sign values from registering as crossings.
 
-Crucially, \texttt{vcount} incorporates a \textit{fallback crossing protocol}: in the baseline system of~\cite{majumder2023automated}, any vehicle that materialized or had its track initiated between an outer gate line and the mid-line was discarded forever, directly causing systematic undercounts during congested conditions. Algorithm~\ref{alg:crossing} permits crossing verification if the directional signs flip reliably even when $\mathcal{S}_j.\text{gate\_touched}$ is null, successfully reclaiming trajectories that enter the camera frame close to the mid-line.
+\texttt{vcount} incorporates a \textit{fallback crossing protocol}: in the baseline system of~\cite{majumder2023automated}, any vehicle that materialized or had its track initiated between an outer gate line and the mid-line was permanently discarded, contributing to systematic undercounts during congested conditions. Algorithm~\ref{alg:crossing} permits crossing verification if the directional signs flip reliably even when $\mathcal{S}_j.\text{gate\_touched}$ is null, reclaiming trajectories that enter the camera frame close to the mid-line. However, this fallback introduces a trade-off: because any sign flip exceeding the 1.5\,px hysteresis margin is accepted without gate confirmation, bounding-box jitter from a vehicle stopped near the line can produce a false count. Furthermore, if a tracked vehicle's state is pruned during extended standstill (after $N_{\text{stale}} = 150$ frames without detection) and the vehicle is subsequently re-detected, the new track may trigger a duplicate count through the fallback path. A per-track spatial deduplication window of 5 frames mitigates but does not fully eliminate this risk.
 
 \subsection{Confidence-Weighted Majority Class Voting}
-Due to viewpoint changes, transient shadows, and scale variations, deep neural networks occasionally exhibit class flickering across frames (e.g., oscillating between \textit{truck} and \textit{bus}). Rather than assigning the instantaneous class label at the exact frame of line crossing, \texttt{vcount} accumulates confidence weights throughout the entire lifespan of tracklet $\mathcal{T}_j$:
+Due to viewpoint changes, transient shadows, and scale variations, deep neural networks occasionally exhibit class flickering across frames (e.g., oscillating between \textit{truck} and \textit{bus}). Rather than assigning the instantaneous class label at the exact frame of line crossing, \texttt{vcount} accumulates confidence weights from track initialization up to the frame at which the crossing event is triggered:
 \begin{equation}
-    \hat{c}_j = \arg\max_{c \in \mathcal{C}} \sum_{m=1}^{N_j} s_{j, m} \cdot \mathbb{I}(c_{j, m} = c)
+    \hat{c}_j = \arg\max_{c \in \mathcal{C}} \sum_{m=1}^{N_j^{\text{cross}}} s_{j, m} \cdot \mathbb{I}(c_{j, m} = c)
     \label{eq:majority_vote}
 \end{equation}
-where $\mathbb{I}(\cdot)$ is the indicator function, $s_{j, m}$ is the confidence score of tracklet $j$ at frame $m$, and $N_j$ is the total number of frames in which tracklet $j$ was observed. This cumulative voting robustly dampens intermittent classification errors.
+where $\mathbb{I}(\cdot)$ is the indicator function, $s_{j, m}$ is the confidence score of tracklet $j$ at frame $m$, and $N_j^{\text{cross}}$ is the number of frames in which tracklet $j$ was observed up to and including the crossing frame. As shown in Algorithm~\ref{alg:crossing} (lines~2--4), once a track is marked \texttt{counted}, the algorithm returns immediately without further vote accumulation. This cumulative voting over the pre-crossing trajectory robustly dampens intermittent classification errors.
 
 \subsection{Temporal Interval Aggregation and Export}
 Let $\mathcal{E} = \{e_1, e_2, \dots, e_E\}$ denote the ordered set of verified crossing events recorded across video duration $T = N/\phi$. For a user-configured aggregation duration $\Delta T$ (e.g., $\Delta T = 900$ seconds for 15-minute intervals), the timeline is partitioned into $K = \lceil T / \Delta T \rceil$ discrete intervals. Each event $e = (j, \hat{c}, \text{dir}, k, t, \mathbf{p})$ is mapped into interval bin index:
 \begin{equation}
     \kappa(e) = \min\left( \left\lfloor \frac{t}{\Delta T} \right\rfloor, \, K - 1 \right)
 \end{equation}
+Note that $t = k/\phi$ assumes a constant frame rate. For variable-frame-rate (VFR) or dropped-frame CCTV streams, container-level presentation timestamps (PTS) should be used instead, and the nominal $\phi$ should be specified as an exact rational value (e.g., $30000/1001$ for NTSC) to avoid cumulative rounding drift over long recordings.
 The aggregated volume tally for interval $\kappa$, direction $d$, and class $c$ is:
 \begin{equation}
     V(\kappa, d, c) = \sum_{e \in \mathcal{E}} \mathbb{I}(\kappa(e) = \kappa \land e.\text{dir} = d \land e.\hat{c} = c)

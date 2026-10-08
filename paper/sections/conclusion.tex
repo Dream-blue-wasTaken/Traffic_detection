@@ -1,18 +1,22 @@
 \section{Conclusion and Future Work}
 \label{sec:conclusion}
 
-This paper introduced \texttt{vcount}, an enhanced, modular computer vision system for directional, multi-class vehicle counting from pre-recorded traffic video. Addressing the core limitations identified in the foundational work of Majumder and Wilmot~\cite{majumder2023automated}, our framework resolves systematic undercounting, perspective parallax, and clock drift by combining modern YOLO object detection, ByteTrack dual-threshold association, tire ground-contact point projection, signed-distance 2D gate geometry, trajectory-lifespan majority class voting, and frame-accurate video timestamping.
+This paper introduced \texttt{vcount}, an enhanced, modular computer vision system for directional, multi-class vehicle counting from pre-recorded traffic video. Addressing the core limitations identified in the foundational work of Majumder and Wilmot~\cite{majumder2023automated}, our framework targets systematic undercounting, perspective parallax, and clock drift by combining modern YOLO object detection, ByteTrack dual-threshold association, bottom-center ground-contact point projection, signed-distance 2D gate geometry, confidence-weighted majority class voting, and frame-accurate video timestamping.
 
-Comprehensive empirical evaluations demonstrate the operational efficiency of the proposed system:
+Empirical benchmarks demonstrate the throughput efficiency of the proposed pipeline:
 \begin{itemize}
-    \item Operating at $640\times 640$ achieves 112.2 inference FPS on an NVIDIA Tesla T4 GPU with 99.50\% mAP@50 and 73.11\% mAP@50--95, delivering a 2.34$\times$ speedup over $960\times 960$ inputs.
-    \item ByteTrack attains an end-to-end streaming throughput of 71.5 FPS, surpassing BoT-SORT by 49.6\% by eliminating redundant optical-flow motion compensation on fixed-mount cameras.
-    \item Ground-contact reference tracking and boundary fallback logic successfully recover vehicles entering between tripwire gates, resolving the primary mechanisms of systematic undercounting.
+    \item Operating at $640\times 640$ achieves 112.2 inference FPS on an NVIDIA Tesla T4 GPU with 99.50\% mAP@50 and 73.11\% mAP@50--95, delivering a 2.34$\times$ speedup over $960\times 960$ inputs (noting that this comparison reflects resolution mismatch against the 640px training distribution).
+    \item ByteTrack attains an end-to-end streaming throughput of 71.5 FPS, exceeding BoT-SORT by 49.6\% (approximately one-third throughput reduction), primarily by avoiding redundant optical-flow motion compensation on fixed-mount cameras.
+    \item Ground-contact reference tracking and boundary fallback logic are designed to recover vehicles entering between tripwire gates, though the fallback introduces a trade-off with potential false positives from bounding-box jitter near the line.
 \end{itemize}
 
-Future work will proceed along three concrete avenues:
+We emphasize that the current evaluation focuses on detection accuracy and tracking throughput. The counting claims have not yet been validated through a systematic ground-truth study, which remains the most critical direction for future work.
+
+Future work will proceed along four concrete avenues:
 \begin{enumerate}
+    \item \textbf{Ground-Truth Counting Evaluation and Ablation Studies}: Conducting systematic counting validation across multiple clips with diverse traffic densities and manual event annotation. Ablation comparisons---centroid vs.\ bottom-center, fallback on/off, voting vs.\ last-frame class, ByteTrack vs.\ SORT, and GMC-only isolation within BoT-SORT---are essential to substantiate the individual contributions claimed in this work.
     \item \textbf{Dynamic Camera Homography Compensation}: Integrating lightweight edge-based homography tracking to dynamically stabilize virtual tripwires during violent wind gusts or PTZ zoom adjustments.
     \item \textbf{3D Bounding Box and Monocular Pose Estimation}: Upgrading the 2D ground-contact heuristic to lightweight monocular 3D bounding box estimation to determine exact 3D vehicle footprints on complex highway interchanges.
     \item \textbf{Edge Device Quantization}: Deploying INT8 TensorRT engine pipelines on embedded hardware (e.g., NVIDIA Jetson Orin Nano) to enable self-contained, solar-powered roadside sensor deployments.
 \end{enumerate}
+

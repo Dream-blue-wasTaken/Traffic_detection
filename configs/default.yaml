@@ -2,7 +2,7 @@ model:
   weights: "yolo11n.pt"      # Note: Ultralytics latest supported pretrained; fallback yolo11/yolo8
   device: "auto"             # "auto" | "cpu" | "cuda:0" | "mps"
   imgsz: 640                 # 640 is faster; use 960 for distant/small vehicles
-  conf: 0.25                 # lower threshold catches more vehicles (tune on validation clip)
+  conf: 0.50                 # high threshold for primary COCO model; reduces false positives on auto-rickshaws
   iou: 0.5                   # NMS IoU
   half: true                 # FP16 on GPU
   classes:                   # COCO ids

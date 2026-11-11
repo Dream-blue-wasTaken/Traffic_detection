@@ -13,7 +13,7 @@ def test_default_config_valid():
 
 def test_load_default_yaml(tmp_path):
     cfg = load_config("configs/default.yaml")
-    assert cfg.model.conf == 0.25
+    assert cfg.model.conf == 0.50
     assert cfg.intervals.length_seconds == 900
 
 

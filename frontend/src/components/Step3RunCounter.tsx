@@ -36,7 +36,7 @@ export const Step3RunCounter: React.FC<Step3RunCounterProps> = ({
     systemInfo?.default_model || 'yolo26s.pt'
   )
   const [tracker, setTracker] = useState<string>('bytetrack')
-  const [confThreshold, setConfThreshold] = useState<number>(0.25)
+  const [confThreshold, setConfThreshold] = useState<number>(0.50)
   const [imgSize, setImgSize] = useState<number>(640)
   const [intervalMinutes, setIntervalMinutes] = useState<number>(5)
   const [countingMode, setCountingMode] = useState<'simple' | 'gated'>('simple')

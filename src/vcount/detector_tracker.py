@@ -86,8 +86,43 @@ def load_model(weights: str) -> YOLO:
     return YOLO(weights)
 
 
+def boxes_overlap_or_contained(
+    primary_box: tuple[float, float, float, float],
+    rickshaw_box: tuple[float, float, float, float],
+    iou_thresh: float = 0.20,
+    containment_thresh: float = 0.30,
+) -> bool:
+    """Check if a primary vehicle box overlaps with or contains an auto-rickshaw detection.
+
+    Uses both Intersection over Union (IoU) and Intersection over Minimum (IoMin) /
+    containment ratio. This handles cases where the primary model predicts a much larger
+    bounding box (e.g. misclassifying an auto-rickshaw as a truck) where traditional IoU
+    drops below 0.35 despite the auto being almost completely inside the truck box.
+    """
+    xA = max(primary_box[0], rickshaw_box[0])
+    yA = max(primary_box[1], rickshaw_box[1])
+    xB = min(primary_box[2], rickshaw_box[2])
+    yB = min(primary_box[3], rickshaw_box[3])
+    inter_area = max(0.0, xB - xA) * max(0.0, yB - yA)
+    if inter_area <= 0.0:
+        return False
+
+    p_area = (primary_box[2] - primary_box[0]) * (primary_box[3] - primary_box[1])
+    r_area = (rickshaw_box[2] - rickshaw_box[0]) * (rickshaw_box[3] - rickshaw_box[1])
+    union_area = p_area + r_area - inter_area
+
+    iou = inter_area / union_area if union_area > 0 else 0.0
+    if iou >= iou_thresh:
+        return True
+
+    # Check if the auto-rickshaw is substantially contained in the primary box (or vice versa)
+    min_area = min(p_area, r_area)
+    containment = inter_area / min_area if min_area > 0 else 0.0
+    return containment >= containment_thresh
+
+
 def compute_box_iou(box1: tuple[float, float, float, float], box2: tuple[float, float, float, float]) -> float:
-    """Calculate Intersection over Union (IoU) of two bounding boxes."""
+    """Calculate standard Intersection over Union (IoU) of two bounding boxes."""
     xA = max(box1[0], box2[0])
     yA = max(box1[1], box2[1])
     xB = min(box1[2], box2[2])
@@ -240,12 +275,14 @@ def track_video(
                     )
                 )
 
-        # 3. Cross-Model Suppression: If a standard vehicle box heavily overlaps with an
-        # auto-rickshaw (IoU > 0.40), suppress the standard vehicle (prevent misclassifying auto as car/bike)
+        # 3. Cross-Model Suppression: If a standard vehicle box heavily overlaps with or
+        # contains an auto-rickshaw (IoU >= 0.20 or containment >= 0.30), suppress the standard vehicle
+        # to prevent COCO models from misclassifying auto-rickshaws as cars or trucks.
         filtered_primary: list[TrackedObject] = []
         for p_obj in primary_objects:
             overlaps_with_rickshaw = any(
-                compute_box_iou(p_obj.xyxy, r_obj.xyxy) > 0.40 for r_obj in rickshaw_objects
+                boxes_overlap_or_contained(p_obj.xyxy, r_obj.xyxy, iou_thresh=0.20, containment_thresh=0.30)
+                for r_obj in rickshaw_objects
             )
             if not overlaps_with_rickshaw:
                 filtered_primary.append(p_obj)

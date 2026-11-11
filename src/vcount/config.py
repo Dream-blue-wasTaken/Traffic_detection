@@ -13,7 +13,7 @@ class ModelConfig:
     weights: str = "yolo26m.pt"
     device: str = "auto"
     imgsz: int = 640
-    conf: float = 0.25
+    conf: float = 0.50
     iou: float = 0.5
     half: bool = True
     classes: dict[str, int] = field(
@@ -25,7 +25,7 @@ class ModelConfig:
         }
     )
     autorickshaw_weights: str | None = None
-    autorickshaw_conf: float = 0.25
+    autorickshaw_conf: float = 0.60  # Higher confidence for improved 2-class model
 
 
 @dataclass

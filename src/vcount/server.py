@@ -295,6 +295,7 @@ def start_pipeline(req: PipelineStartRequest):
                 "imgsz": req.img_size,
                 "classes": active_classes,
                 "autorickshaw_weights": rickshaw_weights,
+                "autorickshaw_conf": 0.60,
             },
             "tracker": {"type": req.tracker},
             "counting": {
